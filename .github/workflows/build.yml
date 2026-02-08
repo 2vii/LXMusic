@@ -1,66 +1,58 @@
-name: Build LXMusic IPA
+name: Build IPA
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Install required dependencies
+      - name: Setup Podfile
         run: |
-          sudo gem install cocoapods
-          
-      - name: Create full project structure
-        run: |
-          # 创建标准iOS项目目录
-          mkdir -p LXMusic/LXMusic
-          mv ContentView.swift LXMusic/LXMusic/
-          
-      - name: Create Podfile
-        run: |
-          cat > LXMusic/Podfile << 'EOF'
+          echo "
           platform :ios, '15.0'
           use_frameworks!
           target 'LXMusic' do
-            pod 'Alamofire', '~> 5.8'
-            pod 'SwiftyJSON', '~> 5.0'
-            pod 'Cache', '~> 6.0'
+            pod 'Alamofire'
+            pod 'SwiftyJSON'
+            pod 'Cache'
           end
-          EOF
-          
-      - name: Install CocoaPods
+          " > Podfile
+
+      - name: Install Pods
+        run: pod install
+
+      - name: Create Xcode Project
         run: |
-          cd LXMusic
-          pod install --verbose
-          
-      - name: Build iOS Archive (No Code Signing)
+          xcodebuild -create-xcproject \
+            -project LXMusic.xcodeproj \
+            -target LXMusic \
+            -platform iOS \
+            -language Swift \
+            -ui SwiftUI
+
+      - name: Build Archive
         run: |
-          cd LXMusic
           xcodebuild archive \
-            -workspace LXMusic.xcworkspace \
+            -project LXMusic.xcodeproj \
             -scheme LXMusic \
-            -destination 'generic/platform=iOS' \
-            -archivePath ../Build/LXMusic.xcarchive \
+            -destination generic/platform=iOS \
+            -archivePath output.xcarchive \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            SKIP_BUNDLE_LOADER_VALIDATION=YES \
-            ALLOW_TARGETING_PLATFORM_VARIANTS=NO
-          
-      - name: Export Unsigned IPA
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Export IPA
         run: |
           xcodebuild -exportArchive \
-            -archivePath Build/LXMusic.xcarchive \
-            -exportPath ../IPA \
-            -exportOptionsPlist <(echo '{"signingStyle":"none","method":"developer-id","compileBitcode":false}') \
+            -archivePath output.xcarchive \
+            -exportPath . \
+            -exportOptionsPlist <(echo '{"signingStyle":"none"}') \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO
-          
-      - name: Upload final IPA
-        uses: actions/upload-artifact@v4
+
+      - uses: actions/upload-artifact@v4
         with:
-          name: LXMusic-TrollStore-Unsigned
-          path: ../IPA/*.ipa
+          name: Final-IPA
+          path: ./*.ipa
